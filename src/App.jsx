@@ -220,7 +220,8 @@ function OrderModal({ existing, onClose, onSave, onDelete }) {
 /* ============================================================ FORM CLIENTE */
 function CustomerForm({ me, existing, profiles, onClose, onSave }) {
   const isEdit = !!existing;
-  const [f, setF] = useState(() => ({
+  const draftKey = `orbita:draft:cliente:${existing?.id || "nuovo"}`;
+  const blank = {
     name: existing?.name || "", code: existing?.code || "", category: existing?.category || "",
     contact: existing?.contact || "", phone: existing?.phone || "", vat: existing?.vat || "",
     cf: existing?.cf || "", iban: existing?.iban || "", email: existing?.email || "",
@@ -228,16 +229,26 @@ function CustomerForm({ me, existing, profiles, onClose, onSave }) {
     address: existing?.address || "", paese: existing?.paese || "Italia", cap: existing?.cap || "",
     pay_method: existing?.pay_method || "", pay_term: existing?.pay_term || "", notes: existing?.notes || "",
     agent_id: existing?.agent_id || existing?.created_by || (me.role === "agent" ? me.id : ""),
-  }));
+  };
+  const readDraft = () => { try { const d = localStorage.getItem(draftKey); return d ? JSON.parse(d) : null; } catch { return null; } };
+  const [f, setF] = useState(() => { const d = readDraft(); return d ? { ...blank, ...d } : blank; });
+  const [restored, setRestored] = useState(() => !!readDraft());
+  useEffect(() => { try { localStorage.setItem(draftKey, JSON.stringify(f)); } catch {} }, [f]);
+  const clearDraft = () => { try { localStorage.removeItem(draftKey); } catch {} };
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
   const setMethod = (m) => setF((p) => ({ ...p, pay_method: m, pay_term: (TERMS_BY_METHOD[m] || []).includes(p.pay_term) ? p.pay_term : "" }));
   const agents = profiles.filter((u) => u.role === "agent");
   const allowedTerms = TERMS_BY_METHOD[f.pay_method] || [];
   const valid = f.name.trim() && f.category && (!isItaly(f.paese) || f.cap.trim());
-  const save = () => { if (!valid) return; onSave({ ...(existing || {}), ...f, name: f.name.trim() }); };
+  const save = () => { if (!valid) return; clearDraft(); onSave({ ...(existing || {}), ...f, name: f.name.trim() }); };
+  const cancel = () => { clearDraft(); onClose(); };
 
   return <Modal wide title={isEdit ? "Modifica cliente" : "Nuovo cliente"} onClose={onClose}>
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {restored && <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: `${T.accent}18`, border: `1px solid ${T.accent}`, borderRadius: 11, padding: "9px 12px", fontSize: 13 }}>
+        <span style={{ color: T.text }}>Bozza ripristinata — avevi già iniziato a compilare.</span>
+        <button onClick={() => { clearDraft(); setF(blank); setRestored(false); }} style={{ background: "transparent", border: "none", color: T.accent, fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Ricomincia</button>
+      </div>}
       <Field icon={Building2} label="Nome cliente *" value={f.name} onChange={set("name")} placeholder="Ragione sociale" />
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 7 }}><Tag size={13} color={T.faint} /><span style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", color: T.muted }}>Categoria *</span></div>
@@ -273,7 +284,7 @@ function CustomerForm({ me, existing, profiles, onClose, onSave }) {
       <Field icon={FileText} label="Note" value={f.notes} onChange={set("notes")} placeholder="Accordi…" textarea />
     </div>
     <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end", gap: 10 }}>
-      <Btn ghost onClick={onClose}>Annulla</Btn>
+      <Btn ghost onClick={cancel}>Annulla</Btn>
       <Btn onClick={save} disabled={!valid}><Save size={16} /> {isEdit ? "Salva" : "Crea cliente"}</Btn>
     </div>
   </Modal>;
