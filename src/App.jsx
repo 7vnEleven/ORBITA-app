@@ -534,7 +534,7 @@ export default function App() {
     setErr("");
     const payload = { ...c };
     delete payload.created_at;
-    ["agent_id", "created_by", "customer_id"].forEach((k) => { if (payload[k] === "" || payload[k] === undefined) payload[k] = null; });
+    ["agent_id", "created_by"].forEach((k) => { if (payload[k] === "" || payload[k] === undefined) payload[k] = null; });
     if (!payload.id) { payload.created_by = session.user.id; delete payload.id; }
     const { error } = await supabase.from("customers").upsert(payload).select();
     if (error) return setErr(error.message);
