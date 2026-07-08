@@ -15,7 +15,8 @@ import {
 /* ---------------- atoms ---------------- */
 const inputStyle = { width: "100%", background: T.ink, border: `1px solid ${T.border}`, borderRadius: 10, padding: "11px 12px", color: T.text, fontSize: 15, outline: "none", boxSizing: "border-box", fontFamily: "inherit" };
 const Eyebrow = ({ children, color = T.accent }) => <div style={{ color, fontSize: 10.5, fontWeight: 800, letterSpacing: 1.4, textTransform: "uppercase" }}>{children}</div>;
-function Avatar({ name, size = 40, color = T.accent, round }) {
+function Avatar({ name, size = 40, color = T.accent, round, src }) {
+  if (src) return <img src={src} alt={name || ""} style={{ width: size, height: size, borderRadius: round ? "50%" : 11, flexShrink: 0, objectFit: "cover", display: "block" }} />;
   return <div style={{ width: size, height: size, borderRadius: round ? "50%" : 11, flexShrink: 0, background: `linear-gradient(135deg, ${color}, ${T.accentDeep})`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: "#fff", fontSize: size * 0.36 }}>{initials(name)}</div>;
 }
 function Logo({ size = 30 }) {
@@ -120,7 +121,7 @@ function Clienti({ me, customers, profiles, onOpen, onNew, isMobile }) {
     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 14, overflow: "hidden" }}>
       {rows.length === 0 ? <Empty icon={Building2} title={q ? "Nessun risultato" : "Ancora nessun cliente"} sub={q ? "Prova un'altra ricerca." : "Crea la prima scheda."} />
         : rows.map((c) => <div key={c.id} onClick={() => onOpen(c.id)} className="rowh" style={{ display: "flex", gap: 12, padding: "12px 14px", borderBottom: `1px solid ${T.borderSoft}`, cursor: "pointer", alignItems: "center" }}>
-          <Avatar name={c.name} size={40} round />
+          <Avatar name={c.name} src={c.avatar} size={40} round />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</div>
             <div style={{ color: T.faint, fontSize: 12.5 }}>{[c.code ? "#" + c.code : "", c.category].filter(Boolean).join(" · ") || "—"}</div>
@@ -156,7 +157,7 @@ function Detail({ me, customer, profiles, onBack, onEdit, onDelete, onSave, isMo
     <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
       <div style={{ width: isMobile ? "100%" : 300, flexShrink: 0 }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 16, padding: 22 }}>
-          <Avatar name={customer.name} size={80} round />
+          <Avatar name={customer.name} src={customer.avatar} size={80} round />
           <div style={{ fontWeight: 900, fontSize: 19, marginTop: 12 }}>{customer.name}</div>
           <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 5, flexWrap: "wrap" }}>
             {customer.code && <span style={{ fontWeight: 700, fontSize: 13 }}>#{customer.code}</span>}
@@ -229,13 +230,44 @@ function CustomerForm({ me, existing, profiles, onClose, onSave }) {
     address: existing?.address || "", paese: existing?.paese || "Italia", cap: existing?.cap || "",
     pay_method: existing?.pay_method || "", pay_term: existing?.pay_term || "", notes: existing?.notes || "",
     agent_id: existing?.agent_id || existing?.created_by || (me.role === "agent" ? me.id : ""),
+    avatar: existing?.avatar || "",
   };
   const readDraft = () => { try { const d = localStorage.getItem(draftKey); return d ? JSON.parse(d) : null; } catch { return null; } };
   const [f, setF] = useState(() => { const d = readDraft(); return d ? { ...blank, ...d } : blank; });
   const [restored, setRestored] = useState(() => !!readDraft());
+  const [uploading, setUploading] = useState(false);
+  const [upErr, setUpErr] = useState("");
   useEffect(() => { try { localStorage.setItem(draftKey, JSON.stringify(f)); } catch {} }, [f]);
   const clearDraft = () => { try { localStorage.removeItem(draftKey); } catch {} };
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
+  // ridimensiona l'immagine lato browser e carica su Supabase Storage (bucket "fotos")
+  const resizeToBlob = (file, max = 640) => new Promise((res, rej) => {
+    const img = new Image(); const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.round(img.width * s), h = Math.round(img.height * s);
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      c.toBlob((b) => b ? res(b) : rej(new Error("resize")), "image/jpeg", 0.82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("load")); };
+    img.src = url;
+  });
+  const pickPhoto = async (e) => {
+    const file = e.target.files && e.target.files[0]; e.target.value = "";
+    if (!file) return;
+    setUpErr(""); setUploading(true);
+    try {
+      const blob = await resizeToBlob(file);
+      const path = `clienti/${existing?.id || uid("c")}-${Date.now()}.jpg`;
+      const { error } = await supabase.storage.from("fotos").upload(path, blob, { contentType: "image/jpeg", upsert: true });
+      if (error) throw error;
+      const { data } = supabase.storage.from("fotos").getPublicUrl(path);
+      setF((p) => ({ ...p, avatar: data.publicUrl }));
+    } catch (err) { setUpErr("Caricamento foto non riuscito. Riprova."); }
+    setUploading(false);
+  };
   const setMethod = (m) => setF((p) => ({ ...p, pay_method: m, pay_term: (TERMS_BY_METHOD[m] || []).includes(p.pay_term) ? p.pay_term : "" }));
   const agents = profiles.filter((u) => ["agent", "admin", "manager"].includes(u.role));
   const allowedTerms = TERMS_BY_METHOD[f.pay_method] || [];
@@ -249,6 +281,19 @@ function CustomerForm({ me, existing, profiles, onClose, onSave }) {
         <span style={{ color: T.text }}>Bozza ripristinata — avevi già iniziato a compilare.</span>
         <button onClick={() => { clearDraft(); setF(blank); setRestored(false); }} style={{ background: "transparent", border: "none", color: T.accent, fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Ricomincia</button>
       </div>}
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <Avatar name={f.name} src={f.avatar} size={64} round />
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 7, background: `linear-gradient(135deg, ${T.accent}, ${T.accentDeep})`, color: "#fff", fontWeight: 700, fontSize: 13.5, padding: "9px 13px", borderRadius: 10, cursor: uploading ? "default" : "pointer" }}>
+              {uploading ? <Loader2 size={15} className="spin" /> : <Plus size={15} />} {f.avatar ? "Cambia foto" : "Carica foto"}
+              <input type="file" accept="image/*" onChange={pickPhoto} disabled={uploading} style={{ display: "none" }} />
+            </label>
+            {f.avatar && <button onClick={() => set("avatar")("")} style={{ background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, padding: "9px 11px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, color: T.muted, fontSize: 13.5, fontWeight: 700 }}><Trash2 size={14} color="#ef6464" /> Rimuovi</button>}
+          </div>
+          {upErr ? <span style={{ color: "#ef6464", fontSize: 12 }}>{upErr}</span> : <span style={{ color: T.faint, fontSize: 12 }}>Foto profilo del cliente (facoltativa)</span>}
+        </div>
+      </div>
       <Field icon={Building2} label="Nome cliente *" value={f.name} onChange={set("name")} placeholder="Ragione sociale" />
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 7 }}><Tag size={13} color={T.faint} /><span style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", color: T.muted }}>Categoria *</span></div>
