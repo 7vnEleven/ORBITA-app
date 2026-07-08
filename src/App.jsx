@@ -226,10 +226,14 @@ function CropModal({ url, onCancel, onConfirm }) {
   const [off, setOff] = useState({ x: 0, y: 0 });
   const [busy, setBusy] = useState(false);
   const drag = useRef(null);
-  const cover = img ? V / Math.min(img.width, img.height) : 1;
-  const disp = cover * zoom;
+  const base = img ? V / Math.max(img.width, img.height) : 1; // "contieni" tutta la foto
+  const disp = base * zoom;
   const dispW = img ? img.width * disp : V, dispH = img ? img.height * disp : V;
-  const clamp = (o) => ({ x: Math.min(0, Math.max(V - dispW, o.x)), y: Math.min(0, Math.max(V - dispH, o.y)) });
+  const clamp = (o) => {
+    const minX = Math.min(0, V - dispW), maxX = Math.max(0, V - dispW);
+    const minY = Math.min(0, V - dispH), maxY = Math.max(0, V - dispH);
+    return { x: Math.min(maxX, Math.max(minX, o.x)), y: Math.min(maxY, Math.max(minY, o.y)) };
+  };
   useEffect(() => { const i = new Image(); i.onload = () => setImg(i); i.src = url; }, [url]);
   useEffect(() => { if (img) setOff(clamp({ x: (V - dispW) / 2, y: (V - dispH) / 2 })); }, [img]);
   useEffect(() => { setOff((o) => clamp(o)); }, [zoom]);
@@ -240,8 +244,10 @@ function CropModal({ url, onCancel, onConfirm }) {
   const confirm = () => {
     if (!img) return; setBusy(true);
     const c = document.createElement("canvas"); c.width = OUT; c.height = OUT;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, OUT, OUT);
     const sx = -off.x / disp, sy = -off.y / disp, s = V / disp;
-    c.getContext("2d").drawImage(img, sx, sy, s, s, 0, 0, OUT, OUT);
+    ctx.drawImage(img, sx, sy, s, s, 0, 0, OUT, OUT);
     c.toBlob((b) => { setBusy(false); onConfirm(b); }, "image/jpeg", 0.85);
   };
   return <div style={{ position: "fixed", inset: 0, zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -250,10 +256,10 @@ function CropModal({ url, onCancel, onConfirm }) {
       <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 4 }}>Ritaglia foto</div>
       <div style={{ color: T.muted, fontSize: 13, marginBottom: 14 }}>Trascina per spostare · usa il cursore per ingrandire</div>
       <div onPointerDown={down} onPointerMove={moveH} onPointerUp={up} onPointerLeave={up}
-        style={{ width: V, height: V, margin: "0 auto", position: "relative", overflow: "hidden", borderRadius: "50%", background: T.ink, cursor: "grab", touchAction: "none", border: `2px solid ${T.border}` }}>
+        style={{ width: V, height: V, margin: "0 auto", position: "relative", overflow: "hidden", borderRadius: "50%", background: "#ffffff", cursor: "grab", touchAction: "none", border: `2px solid ${T.border}` }}>
         {img && <img src={url} draggable={false} style={{ position: "absolute", left: off.x, top: off.y, width: dispW, height: dispH, maxWidth: "none", userSelect: "none", pointerEvents: "none" }} />}
       </div>
-      <input type="range" min="1" max="4" step="0.01" value={zoom} onChange={(e) => setZoom(+e.target.value)} style={{ width: "100%", marginTop: 16, accentColor: T.accent }} />
+      <input type="range" min="1" max="5" step="0.01" value={zoom} onChange={(e) => setZoom(+e.target.value)} style={{ width: "100%", marginTop: 16, accentColor: T.accent }} />
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 12 }}>
         <Btn ghost onClick={onCancel}>Annulla</Btn>
         <Btn onClick={confirm} disabled={busy || !img}>{busy ? <Loader2 size={16} className="spin" /> : <><Save size={16} /> Usa foto</>}</Btn>
