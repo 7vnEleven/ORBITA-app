@@ -79,7 +79,7 @@ function Login() {
         <div style={{ fontWeight: 900, fontSize: 26, letterSpacing: 4 }}>ORBITA</div>
         <Eyebrow>Gestione clienti</Eyebrow>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }} onKeyDown={(e) => { if (e.key === "Enter" && email && pw && !busy) submit(); }}>
         <Field icon={Mail} label="Email" value={email} onChange={setEmail} placeholder="tu@azienda.com" type="email" />
         <Field icon={KeyRound} label="Password" value={pw} onChange={setPw} placeholder="••••••••" type="password" />
         {err && <div style={{ color: "#ef6464", fontSize: 13, textAlign: "center" }}>{err}</div>}
@@ -237,7 +237,7 @@ function CustomerForm({ me, existing, profiles, onClose, onSave }) {
   const clearDraft = () => { try { localStorage.removeItem(draftKey); } catch {} };
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
   const setMethod = (m) => setF((p) => ({ ...p, pay_method: m, pay_term: (TERMS_BY_METHOD[m] || []).includes(p.pay_term) ? p.pay_term : "" }));
-  const agents = profiles.filter((u) => u.role === "agent");
+  const agents = profiles.filter((u) => ["agent", "admin", "manager"].includes(u.role));
   const allowedTerms = TERMS_BY_METHOD[f.pay_method] || [];
   const valid = f.name.trim() && f.category && (!isItaly(f.paese) || f.cap.trim());
   const save = () => { if (!valid) return; clearDraft(); onSave({ ...(existing || {}), ...f, name: f.name.trim() }); };
@@ -301,7 +301,7 @@ function CalendarView({ me, appts, customers, profiles, onNew, onEdit, isMobile 
   const byDay = useMemo(() => { const m = {}; mine.forEach((a) => { (m[a.date] = m[a.date] || []).push(a); }); return m; }, [mine]);
   const cells = monthCells(cur.getFullYear(), cur.getMonth());
   const dayList = (byDay[sel] || []).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
-  const agents = profiles.filter((u) => u.role === "agent");
+  const agents = profiles.filter((u) => ["agent", "admin", "manager"].includes(u.role));
 
   return <div style={{ padding: isMobile ? "16px 14px 90px" : "26px 30px 40px" }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, gap: 12, flexWrap: "wrap" }}>
@@ -360,7 +360,7 @@ function ApptModal({ me, existing, defaultDate, customers, profiles, onClose, on
   const [done, setDone] = useState(existing?.done || false);
   const [agentId, setAgentId] = useState(existing?.agent_id || (me.role === "agent" ? me.id : ""));
   const custs = customers;
-  const agents = profiles.filter((u) => u.role === "agent");
+  const agents = profiles.filter((u) => ["agent", "admin", "manager"].includes(u.role));
   const isNew = customerId === "__new__";
   const isProspect = isNew && !existing?.customer_id;
   const isPast = new Date(`${date}T${time || "23:59"}:00`) < new Date();
@@ -427,7 +427,7 @@ function ItalyMap({ visited = [], todo = [] }) {
   </svg>;
 }
 function Mappe({ me, appts, customers, profiles, isMobile }) {
-  const agents = profiles.filter((u) => u.role === "agent");
+  const agents = profiles.filter((u) => ["agent", "admin", "manager"].includes(u.role));
   const [sel, setSel] = useState(seesAll(me) ? (agents[0]?.id || "") : me.id);
   const agent = profiles.find((u) => u.id === sel);
   const { visited, todo, unmatched } = useMemo(() => agentPlaces(sel, appts, customers), [sel, appts, customers]);
