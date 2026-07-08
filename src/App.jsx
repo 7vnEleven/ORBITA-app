@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   LogIn, LogOut, Search, Plus, X, ChevronRight, ChevronLeft, Users, User, Phone, Mail,
   MapPin, FileText, Trash2, Shield, Pencil, BarChart3, Building2, Receipt, Crown, Save,
@@ -218,6 +218,50 @@ function OrderModal({ existing, onClose, onSave, onDelete }) {
   </Modal>;
 }
 
+/* ============================================================ RITAGLIO FOTO */
+function CropModal({ url, onCancel, onConfirm }) {
+  const V = 288, OUT = 640;
+  const [img, setImg] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const [off, setOff] = useState({ x: 0, y: 0 });
+  const [busy, setBusy] = useState(false);
+  const drag = useRef(null);
+  const cover = img ? V / Math.min(img.width, img.height) : 1;
+  const disp = cover * zoom;
+  const dispW = img ? img.width * disp : V, dispH = img ? img.height * disp : V;
+  const clamp = (o) => ({ x: Math.min(0, Math.max(V - dispW, o.x)), y: Math.min(0, Math.max(V - dispH, o.y)) });
+  useEffect(() => { const i = new Image(); i.onload = () => setImg(i); i.src = url; }, [url]);
+  useEffect(() => { if (img) setOff(clamp({ x: (V - dispW) / 2, y: (V - dispH) / 2 })); }, [img]);
+  useEffect(() => { setOff((o) => clamp(o)); }, [zoom]);
+  const down = (e) => { const p = pt(e); drag.current = { x: p.x - off.x, y: p.y - off.y }; };
+  const moveH = (e) => { if (!drag.current) return; const p = pt(e); setOff(clamp({ x: p.x - drag.current.x, y: p.y - drag.current.y })); };
+  const up = () => { drag.current = null; };
+  const pt = (e) => ({ x: e.clientX, y: e.clientY });
+  const confirm = () => {
+    if (!img) return; setBusy(true);
+    const c = document.createElement("canvas"); c.width = OUT; c.height = OUT;
+    const sx = -off.x / disp, sy = -off.y / disp, s = V / disp;
+    c.getContext("2d").drawImage(img, sx, sy, s, s, 0, 0, OUT, OUT);
+    c.toBlob((b) => { setBusy(false); onConfirm(b); }, "image/jpeg", 0.85);
+  };
+  return <div style={{ position: "fixed", inset: 0, zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+    <div onClick={onCancel} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.75)" }} />
+    <div style={{ position: "relative", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 18, padding: 20, width: "100%", maxWidth: 360 }}>
+      <div style={{ fontWeight: 900, fontSize: 18, marginBottom: 4 }}>Ritaglia foto</div>
+      <div style={{ color: T.muted, fontSize: 13, marginBottom: 14 }}>Trascina per spostare · usa il cursore per ingrandire</div>
+      <div onPointerDown={down} onPointerMove={moveH} onPointerUp={up} onPointerLeave={up}
+        style={{ width: V, height: V, margin: "0 auto", position: "relative", overflow: "hidden", borderRadius: "50%", background: T.ink, cursor: "grab", touchAction: "none", border: `2px solid ${T.border}` }}>
+        {img && <img src={url} draggable={false} style={{ position: "absolute", left: off.x, top: off.y, width: dispW, height: dispH, maxWidth: "none", userSelect: "none", pointerEvents: "none" }} />}
+      </div>
+      <input type="range" min="1" max="4" step="0.01" value={zoom} onChange={(e) => setZoom(+e.target.value)} style={{ width: "100%", marginTop: 16, accentColor: T.accent }} />
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 12 }}>
+        <Btn ghost onClick={onCancel}>Annulla</Btn>
+        <Btn onClick={confirm} disabled={busy || !img}>{busy ? <Loader2 size={16} className="spin" /> : <><Save size={16} /> Usa foto</>}</Btn>
+      </div>
+    </div>
+  </div>;
+}
+
 /* ============================================================ FORM CLIENTE */
 function CustomerForm({ me, existing, profiles, onClose, onSave }) {
   const isEdit = !!existing;
@@ -237,29 +281,22 @@ function CustomerForm({ me, existing, profiles, onClose, onSave }) {
   const [restored, setRestored] = useState(() => !!readDraft());
   const [uploading, setUploading] = useState(false);
   const [upErr, setUpErr] = useState("");
+  const [cropUrl, setCropUrl] = useState(null);
   useEffect(() => { try { localStorage.setItem(draftKey, JSON.stringify(f)); } catch {} }, [f]);
   const clearDraft = () => { try { localStorage.removeItem(draftKey); } catch {} };
   const set = (k) => (v) => setF((p) => ({ ...p, [k]: v }));
-  // ridimensiona l'immagine lato browser e carica su Supabase Storage (bucket "fotos")
-  const resizeToBlob = (file, max = 640) => new Promise((res, rej) => {
-    const img = new Image(); const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const s = Math.min(1, max / Math.max(img.width, img.height));
-      const w = Math.round(img.width * s), h = Math.round(img.height * s);
-      const c = document.createElement("canvas"); c.width = w; c.height = h;
-      c.getContext("2d").drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(url);
-      c.toBlob((b) => b ? res(b) : rej(new Error("resize")), "image/jpeg", 0.82);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("load")); };
-    img.src = url;
-  });
-  const pickPhoto = async (e) => {
+  // scelta file -> apre il ritaglio interattivo
+  const onFile = (e) => {
     const file = e.target.files && e.target.files[0]; e.target.value = "";
     if (!file) return;
+    setUpErr("");
+    setCropUrl(URL.createObjectURL(file));
+  };
+  // carica su Supabase Storage il ritaglio confermato (bucket "fotos")
+  const uploadBlob = async (blob) => {
+    setCropUrl(null); if (!blob) return;
     setUpErr(""); setUploading(true);
     try {
-      const blob = await resizeToBlob(file);
       const path = `clienti/${existing?.id || uid("c")}-${Date.now()}.jpg`;
       const { error } = await supabase.storage.from("fotos").upload(path, blob, { contentType: "image/jpeg", upsert: true });
       if (error) throw error;
@@ -287,7 +324,7 @@ function CustomerForm({ me, existing, profiles, onClose, onSave }) {
           <div style={{ display: "flex", gap: 8 }}>
             <label style={{ display: "inline-flex", alignItems: "center", gap: 7, background: `linear-gradient(135deg, ${T.accent}, ${T.accentDeep})`, color: "#fff", fontWeight: 700, fontSize: 13.5, padding: "9px 13px", borderRadius: 10, cursor: uploading ? "default" : "pointer" }}>
               {uploading ? <Loader2 size={15} className="spin" /> : <Plus size={15} />} {f.avatar ? "Cambia foto" : "Carica foto"}
-              <input type="file" accept="image/*" onChange={pickPhoto} disabled={uploading} style={{ display: "none" }} />
+              <input type="file" accept="image/*" onChange={onFile} disabled={uploading} style={{ display: "none" }} />
             </label>
             {f.avatar && <button onClick={() => set("avatar")("")} style={{ background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, padding: "9px 11px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, color: T.muted, fontSize: 13.5, fontWeight: 700 }}><Trash2 size={14} color="#ef6464" /> Rimuovi</button>}
           </div>
@@ -332,6 +369,7 @@ function CustomerForm({ me, existing, profiles, onClose, onSave }) {
       <Btn ghost onClick={cancel}>Annulla</Btn>
       <Btn onClick={save} disabled={!valid}><Save size={16} /> {isEdit ? "Salva" : "Crea cliente"}</Btn>
     </div>
+    {cropUrl && <CropModal url={cropUrl} onCancel={() => setCropUrl(null)} onConfirm={uploadBlob} />}
   </Modal>;
 }
 
