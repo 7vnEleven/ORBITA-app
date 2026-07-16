@@ -29,10 +29,10 @@ function Logo({ size = 30 }) {
 function Btn({ children, onClick, disabled, color = T.accent, ghost, full }) {
   return <button onClick={onClick} disabled={disabled} style={{ width: full ? "100%" : undefined, border: ghost ? `1px solid ${T.border}` : "none", cursor: disabled ? "default" : "pointer", background: ghost ? "transparent" : (disabled ? T.raised2 : `linear-gradient(135deg, ${color}, ${T.accentDeep})`), color: ghost ? T.text : (disabled ? T.faint : "#fff"), fontWeight: 700, fontSize: 14.5, padding: "11px 16px", borderRadius: 11, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, whiteSpace: "nowrap" }}>{children}</button>;
 }
-function Field({ icon: Icon, label, value, onChange, placeholder, type = "text", textarea }) {
+function Field({ icon: Icon, label, value, onChange, placeholder, type = "text", textarea, name, autoComplete }) {
   return <label style={{ display: "block" }}>
     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>{Icon && <Icon size={13} color={T.faint} />}<span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase", color: T.muted }}>{label}</span></div>
-    {textarea ? <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={3} style={{ ...inputStyle, resize: "vertical" }} /> : <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} type={type} style={inputStyle} />}
+    {textarea ? <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={3} style={{ ...inputStyle, resize: "vertical" }} /> : <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} type={type} name={name} autoComplete={autoComplete} style={inputStyle} />}
   </label>;
 }
 const Chip = ({ children, href, as = "div" }) => { const Tag = as; return <Tag href={href} target={href ? "_blank" : undefined} rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: T.surface, border: `1px solid ${T.borderSoft}`, borderRadius: 9, padding: "7px 11px", fontSize: 13, color: T.muted, textDecoration: "none" }}>{children}</Tag>; };
@@ -67,6 +67,7 @@ function Login() {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [scaduta] = useState(() => { try { const v = sessionStorage.getItem("orbita-scaduta"); sessionStorage.removeItem("orbita-scaduta"); return !!v; } catch { return false; } });
   const submit = async () => {
     setBusy(true); setErr("");
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: pw });
@@ -80,12 +81,15 @@ function Login() {
         <div style={{ fontWeight: 900, fontSize: 26, letterSpacing: 4 }}>ORBITA</div>
         <Eyebrow>Gestione clienti</Eyebrow>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }} onKeyDown={(e) => { if (e.key === "Enter" && email && pw && !busy) submit(); }}>
-        <Field icon={Mail} label="Email" value={email} onChange={setEmail} placeholder="tu@azienda.com" type="email" />
-        <Field icon={KeyRound} label="Password" value={pw} onChange={setPw} placeholder="••••••••" type="password" />
+      {scaduta && <div style={{ background: `${T.gold}1a`, border: `1px solid ${T.gold}`, borderRadius: 11, padding: "10px 12px", marginBottom: 12, fontSize: 12.5, color: T.text, textAlign: "center" }}>Sessione chiusa per inattività. Accedi di nuovo.</div>}
+      <form style={{ display: "flex", flexDirection: "column", gap: 12 }} onSubmit={(e) => { e.preventDefault(); if (email && pw && !busy) submit(); }}>
+        <Field icon={Mail} label="Email" value={email} onChange={setEmail} placeholder="tu@azienda.com" type="email" name="username" autoComplete="username" />
+        <Field icon={KeyRound} label="Password" value={pw} onChange={setPw} placeholder="••••••••" type="password" name="password" autoComplete="current-password" />
         {err && <div style={{ color: "#ef6464", fontSize: 13, textAlign: "center" }}>{err}</div>}
-        <Btn full disabled={busy || !email || !pw} onClick={submit}>{busy ? <Loader2 size={18} className="spin" /> : <><LogIn size={18} /> Entra</>}</Btn>
-      </div>
+        <button type="submit" disabled={busy || !email || !pw} style={{ width: "100%", border: "none", cursor: (busy || !email || !pw) ? "default" : "pointer", background: (busy || !email || !pw) ? T.raised2 : `linear-gradient(135deg, ${T.accent}, ${T.accentDeep})`, color: (busy || !email || !pw) ? T.faint : "#fff", fontWeight: 700, fontSize: 14.5, padding: "11px 16px", borderRadius: 11, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "inherit" }}>
+          {busy ? <Loader2 size={18} className="spin" /> : <><LogIn size={18} /> Entra</>}
+        </button>
+      </form>
     </div>
   </div>;
 }
@@ -616,6 +620,19 @@ export default function App() {
 
   useEffect(() => { if (session?.user) { setLoading(true); loadAll(session.user.id); } }, [session, loadAll]);
   useEffect(() => { const f = () => { if (session?.user) loadAll(session.user.id); }; window.addEventListener("focus", f); return () => window.removeEventListener("focus", f); }, [session, loadAll]);
+
+  // --- Logout automatico dopo 30 minuti di inattivita' ---
+  useEffect(() => {
+    if (!session) return;
+    const LIMITE = 30 * 60 * 1000;
+    let timer;
+    const scatta = async () => { try { sessionStorage.setItem("orbita-scaduta", "1"); } catch {} await supabase.auth.signOut(); };
+    const riarma = () => { clearTimeout(timer); timer = setTimeout(scatta, LIMITE); };
+    const eventi = ["mousedown", "keydown", "touchstart", "scroll", "focus"];
+    eventi.forEach((e) => window.addEventListener(e, riarma, { passive: true }));
+    riarma();
+    return () => { clearTimeout(timer); eventi.forEach((e) => window.removeEventListener(e, riarma)); };
+  }, [session]);
 
   const reload = () => session?.user && loadAll(session.user.id);
 
