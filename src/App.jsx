@@ -557,7 +557,7 @@ function Mappe({ me, appts, customers, profiles, isMobile }) {
 /* ============================================================ UTENTI */
 function Utenti({ me, profiles, customers, onUpdate, isMobile }) {
   const count = (id) => customers.filter((c) => refAgent(c) === id).length;
-  const ROLES = [["agent", "Agente"], ["manager", "Responsabile"], ["packaging", "Imballaggio"], ["admin", "Titolare"]];
+  const ROLES = [["agent", "Agente"], ["manager", "Responsabile"], ["packaging", "Imballaggio"], ["admin", "Titolare"], ["ufficio", "Ufficio codici"]];
   const [editId, setEditId] = useState(null);
   const ed = profiles.find((p) => p.id === editId);
   return <div style={{ padding: isMobile ? "16px 14px 90px" : "26px 30px 40px", maxWidth: 780 }}>
@@ -567,14 +567,18 @@ function Utenti({ me, profiles, customers, onUpdate, isMobile }) {
       {profiles.map((u) => <div key={u.id} style={{ background: T.surface, border: `1px solid ${editId === u.id ? T.accent : T.border}`, borderRadius: 12, padding: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <Avatar name={u.name} size={40} color={roleColor(u.role)} />
-          <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700, fontSize: 15 }}>{u.name} <span style={{ color: roleColor(u.role), fontSize: 12, fontWeight: 700 }}>· {ROLE_LABEL[u.role]}</span></div><div style={{ color: T.muted, fontSize: 12.5 }}>{u.role === "agent" ? `${count(u.id)} clienti` : ROLE_DESC[u.role]}</div></div>
+          <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700, fontSize: 15 }}>{u.name} <span style={{ color: roleColor(u.role), fontSize: 12, fontWeight: 700 }}>· {ROLE_LABEL[u.role]}</span>{u.accesso_codici && <span style={{ color: "#E2A234", fontSize: 12, fontWeight: 700 }}> · Codici ✓</span>}</div><div style={{ color: T.muted, fontSize: 12.5 }}>{u.role === "agent" ? `${count(u.id)} clienti` : ROLE_DESC[u.role]}</div></div>
           {u.id !== me.id && <button onClick={() => setEditId(editId === u.id ? null : u.id)} style={{ background: T.raised2, border: "none", borderRadius: 9, padding: 8, cursor: "pointer" }}><Pencil size={15} color={T.muted} /></button>}
         </div>
         {editId === u.id && <div style={{ marginTop: 12, borderTop: `1px solid ${T.borderSoft}`, paddingTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
           <Field icon={User} label="Nome" value={ed.name} onChange={(v) => onUpdate(u.id, { name: v })} />
           <div><div style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", color: T.muted, marginBottom: 7 }}>Ruolo</div>
-            <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>{ROLES.map(([k, l]) => <button key={k} onClick={() => onUpdate(u.id, { role: k, can_edit: k === "admin" ? true : (k === "packaging" ? false : ed.can_edit) })} style={{ padding: "8px 12px", borderRadius: 9, fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: ed.role === k ? roleColor(k) : T.ink, color: ed.role === k ? "#0B0D16" : T.muted, border: `1px solid ${ed.role === k ? roleColor(k) : T.border}` }}>{l}</button>)}</div></div>
-          {ed.role !== "packaging" && ed.role !== "admin" && <button onClick={() => onUpdate(u.id, { can_edit: !ed.can_edit })} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: T.ink, border: `1px solid ${ed.can_edit ? T.accent : T.border}`, borderRadius: 10, padding: "10px 12px", cursor: "pointer" }}>
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>{ROLES.map(([k, l]) => <button key={k} onClick={() => onUpdate(u.id, { role: k, can_edit: k === "admin" ? true : (k === "packaging" || k === "ufficio" ? false : ed.can_edit), ...(k === "ufficio" ? { accesso_codici: true } : {}) })} style={{ padding: "8px 12px", borderRadius: 9, fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: ed.role === k ? roleColor(k) : T.ink, color: ed.role === k ? "#0B0D16" : T.muted, border: `1px solid ${ed.role === k ? roleColor(k) : T.border}` }}>{l}</button>)}</div></div>
+          <button onClick={() => onUpdate(u.id, { accesso_codici: !ed.accesso_codici })} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: T.ink, border: `1px solid ${ed.accesso_codici ? "#E2A234" : T.border}`, borderRadius: 10, padding: "10px 12px", cursor: "pointer" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 7, color: T.text, fontSize: 13, fontWeight: 700 }}><KeyRound size={14} color={ed.accesso_codici ? "#E2A234" : T.faint} /> Decodificatore Codici</span>
+            <span style={{ width: 38, height: 22, borderRadius: 11, background: ed.accesso_codici ? "#E2A234" : T.raised2, position: "relative" }}><span style={{ position: "absolute", top: 3, left: ed.accesso_codici ? 19 : 3, width: 16, height: 16, borderRadius: "50%", background: "#fff" }} /></span>
+          </button>
+          {ed.role !== "packaging" && ed.role !== "admin" && ed.role !== "ufficio" && <button onClick={() => onUpdate(u.id, { can_edit: !ed.can_edit })} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: T.ink, border: `1px solid ${ed.can_edit ? T.accent : T.border}`, borderRadius: 10, padding: "10px 12px", cursor: "pointer" }}>
             <span style={{ display: "flex", alignItems: "center", gap: 7, color: T.text, fontSize: 13, fontWeight: 700 }}><Pencil size={14} color={ed.can_edit ? T.accent : T.faint} /> Può modificare</span>
             <span style={{ width: 38, height: 22, borderRadius: 11, background: ed.can_edit ? T.accent : T.raised2, position: "relative" }}><span style={{ position: "absolute", top: 3, left: ed.can_edit ? 19 : 3, width: 16, height: 16, borderRadius: "50%", background: "#fff" }} /></span>
           </button>}
@@ -685,6 +689,12 @@ export default function App() {
   if (!me) return <Shell><div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: 20, textAlign: "center" }}>
     <Logo size={40} /><div style={{ color: T.text, fontWeight: 700 }}>Profilo non trovato</div>
     <div style={{ color: T.muted, fontSize: 14, maxWidth: 320 }}>Il tuo account esiste ma non ha un profilo collegato. Ricarica la pagina; se persiste, controlla che lo schema SQL sia stato eseguito.</div>
+    <Btn ghost onClick={() => supabase.auth.signOut()}><LogOut size={16} /> Esci</Btn>
+  </div></Shell>;
+
+  if (me.role === "ufficio") return <Shell><div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14, padding: 20, textAlign: "center" }}>
+    <Logo size={40} /><div style={{ color: T.text, fontWeight: 700 }}>Account non abilitato a ORBITA</div>
+    <div style={{ color: T.muted, fontSize: 14, maxWidth: 320 }}>Questo account è riservato all'ufficio codici: può usare solo il decodificatore Codici Alesia.</div>
     <Btn ghost onClick={() => supabase.auth.signOut()}><LogOut size={16} /> Esci</Btn>
   </div></Shell>;
 

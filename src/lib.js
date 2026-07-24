@@ -17,12 +17,12 @@ export const TERMS_BY_METHOD = {
 };
 export const isItaly = (p) => (p || "").trim().toLowerCase() === "italia";
 
-export const ROLE_LABEL = { admin: "Titolare", manager: "Responsabile", agent: "Agente", packaging: "Imballaggio" };
-export const ROLE_DESC = { admin: "Vede tutto · gestisce utenti", manager: "Vede tutti i clienti e gli ordini", agent: "Vede solo i clienti che segue", packaging: "Solo schede e prodotti · niente prezzi" };
+export const ROLE_LABEL = { admin: "Titolare", manager: "Responsabile", agent: "Agente", packaging: "Imballaggio", ufficio: "Ufficio codici" };
+export const ROLE_DESC = { admin: "Vede tutto · gestisce utenti", manager: "Vede tutti i clienti e gli ordini", agent: "Vede solo i clienti che segue", packaging: "Solo schede e prodotti · niente prezzi", ufficio: "Solo decodificatore Codici · niente ORBITA" };
 export const seesAll = (u) => ["admin", "manager", "packaging"].includes(u?.role);
 export const seesMoney = (u) => u?.role !== "packaging";
 export const canManage = (u) => u?.role === "admin";
-export const roleColor = (r) => (r === "admin" || r === "manager") ? T.gold : r === "packaging" ? T.ok : T.accent;
+export const roleColor = (r) => (r === "admin" || r === "manager") ? T.gold : r === "packaging" ? T.ok : r === "ufficio" ? "#E2A234" : T.accent;
 export const refAgent = (c) => c.agent_id || c.created_by;
 
 export const eur = (n) => (Number(n) || 0).toLocaleString("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
